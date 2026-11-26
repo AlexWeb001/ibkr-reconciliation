@@ -10,7 +10,7 @@ safe and unambiguous, and reports everything else for a human to decide.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class ReconcileReport:
         return "\n".join(lines)
 
 
-def _normalise_broker_positions(raw, symbols: Optional[set]) -> Dict[str, dict]:
+def _normalise_broker_positions(raw, symbols: Optional[set] = None) -> Dict[str, dict]:
     """
     Convert ib_async / ib_insync Position objects into {symbol: {side, qty}}.
 
@@ -115,7 +115,7 @@ def reconcile(strategy, connector, extra_symbols=None,
       - broker-only position (no entry price or exit levels are known for it)
       - side mismatch (a genuine contradiction, likely manual intervention)
     """
-    report = ReconcileReport(checked_at=datetime.now().isoformat())
+    report = ReconcileReport(checked_at=datetime.now(timezone.utc).isoformat())
 
     if connector is None or not getattr(connector, "connected", False):
         report.broker_unavailable = True
@@ -131,8 +131,10 @@ def reconcile(strategy, connector, extra_symbols=None,
         return report
 
     local = strategy.get_open_positions()
+    # Only symbols the bot holds or was told to watch. With an empty set the
+    # bot owns nothing, so nothing at the broker is its business.
     watched = set(local) | set(extra_symbols or [])
-    broker = _normalise_broker_positions(raw, watched or None)
+    broker = _normalise_broker_positions(raw, watched)
 
     for sym in sorted(set(local) | set(broker)):
         lp = local.get(sym)

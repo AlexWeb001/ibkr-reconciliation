@@ -168,3 +168,28 @@ def test_stale_copy_dropped_when_perm_id_record_exists():
     r.on_order_status(make_trade(status="Filled", perm_id=9001, order_id=42))
     assert r.stats()["orders"] == 1
     assert r.live_orders() == []
+
+
+def test_pending_cancel_is_still_live():
+    """Cancel requested, not confirmed: the order can still fill."""
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_order_status(make_trade(status="PendingCancel", filled=0, remaining=10,
+                                 perm_id=777, order_id=1))
+    assert [o.perm_id for o in r.live_orders()] == [777]
+    r.on_order_status(make_trade(status="Cancelled", filled=0, remaining=10,
+                                 perm_id=777, order_id=1))
+    assert r.live_orders() == []
+
+
+def test_api_pending_is_live():
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_order_status(make_trade(status="ApiPending", filled=0, remaining=10,
+                                 perm_id=777, order_id=1))
+    assert len(r.live_orders()) == 1
+
+
+def test_fill_before_first_status_attaches_to_order():
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_exec_details(None, make_fill("0001.abc", perm_id=555001))
+    r.on_order_status(make_trade(perm_id=555001))
+    assert r.get_order(perm_id=555001).exec_ids == {"0001.abc"}

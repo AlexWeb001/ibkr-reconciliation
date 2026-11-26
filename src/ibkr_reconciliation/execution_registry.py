@@ -29,6 +29,12 @@ from typing import Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
+# IBKR order states. PendingCancel is still live: the cancel was requested,
+# not confirmed, and the order can still fill. ApiPending: accepted by the
+# API, not yet sent on.
+LIVE = ("ApiPending", "PendingSubmit", "PreSubmitted", "Submitted", "PendingCancel")
+TERMINAL = ("Filled", "Cancelled", "ApiCancelled", "Inactive")
+
 
 @dataclass
 class Execution:
@@ -65,11 +71,11 @@ class OrderRecord:
 
     @property
     def is_terminal(self) -> bool:
-        return self.status in ("Filled", "Cancelled", "ApiCancelled", "Inactive")
+        return self.status in TERMINAL
 
     @property
     def is_live(self) -> bool:
-        return self.status in ("Submitted", "PreSubmitted", "PendingSubmit")
+        return self.status in LIVE
 
 
 def _now() -> str:
@@ -208,6 +214,10 @@ class ExecutionRegistry:
                         total_qty=float(getattr(order, "totalQuantity", 0) or 0),
                         client_id=client_id,
                     )
+                    # A fill can be reported before the first order status.
+                    if perm_id:
+                        rec.exec_ids = {e.exec_id for e in self._executions.values()
+                                        if e.perm_id == perm_id}
                     self._orders[key] = rec
 
                 rec.status = getattr(status_obj, "status", "") or rec.status

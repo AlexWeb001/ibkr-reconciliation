@@ -80,6 +80,8 @@ reg.live_orders()
 - Deduplicates on `execId`.
 - Orders are keyed by `permId`, so manual TWS orders and other clients are visible.
 - The first status of a new order can arrive before IBKR assigns a `permId` (`PendingSubmit` with `permId = 0`). That early record is moved under the real `permId` when it appears, instead of being left behind as a second order that looks live. Only records from the same API client are merged, because `orderId` is unique per client.
+- `PendingCancel` counts as live: the cancel was requested, not confirmed, and the order can still fill. Treating it as gone is how a "cancelled" stop fills behind your back.
+- A fill reported before the order's first status is still attached to that order when the status arrives.
 - Commission reports, which arrive separately, are attached to their fill. NaN `realizedPNL` is ignored.
 - A malformed event is logged and dropped; it never takes the event loop down.
 
@@ -103,7 +105,7 @@ if report.blocking:
 | Opposite side | **reported, needs a human** — a real contradiction, usually manual intervention |
 | Not connected / broker error | **nothing changes** |
 
-Never places or cancels orders. Symbols the bot does not trade are ignored, so manual positions on the same account are left alone. `apply_fixes=False` gives a report-only mode.
+Never places or cancels orders. Only symbols the bot holds or is told to watch (`extra_symbols`) are compared, so manual positions on the same account are left alone — including when the bot itself is flat. `apply_fixes=False` gives a report-only mode.
 
 `strategy` needs `get_open_positions()`, `set_position_quantity()`, `drop_position()`; `connector` needs `connected` and `get_positions()`. See the fakes in `tests/` for the exact shapes.
 

@@ -112,3 +112,15 @@ def test_summary_mentions_manual_review():
     s = FakeStrategy(LONG_10)
     r = reconcile(s, FakeConnector([pos("AA", -10)]))
     assert "manual review" in r.summary()
+
+
+def test_flat_bot_ignores_manual_position():
+    """The bot holds nothing and watches nothing: a manual trade is not its business."""
+    s = FakeStrategy({})
+    r = reconcile(s, FakeConnector([pos("TSLA", 500)]))
+    assert r.clean and r.discrepancies == [] and s.log == []
+
+
+def test_checked_at_is_utc():
+    r = reconcile(FakeStrategy(LONG_10), FakeConnector([pos("AA", 10)]))
+    assert r.checked_at.endswith("+00:00")
