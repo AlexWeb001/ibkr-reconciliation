@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibkr-reconciliation"
+version = "0.1.0"
+description = "Order intent log, execution registry and position reconciliation for Interactive Brokers"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Dmytro Kulyk" }]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["interactive-brokers", "ibkr", "tws-api", "ib_async", "trading", "reconciliation"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
