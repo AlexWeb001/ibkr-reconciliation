@@ -1,8 +1,6 @@
 """Execution registry. No broker connection required."""
 from types import SimpleNamespace as Obj
 
-import pytest
-
 from ibkr_reconciliation import ExecutionRegistry
 
 
@@ -119,12 +117,54 @@ def test_other_clients_order_tracked_by_perm_id():
     assert rec.client_id == 99 and rec.symbol == "NVDA"
 
 
-@pytest.mark.xfail(strict=True, reason="known limitation: record keyed by orderId "
-                   "before permId is assigned is not merged (see README)")
 def test_status_before_perm_id_is_merged():
+    """PendingSubmit can come with permId = 0; the next status carries the real one."""
     r = ExecutionRegistry(own_client_id=7)
     r.on_order_status(make_trade(status="PendingSubmit", filled=0, remaining=10,
                                  perm_id=0, order_id=42))
+    assert [o.status for o in r.live_orders()] == ["PendingSubmit"]
+
+    r.on_order_status(make_trade(status="Submitted", filled=0, remaining=10,
+                                 perm_id=9001, order_id=42))
+    assert r.stats()["orders"] == 1
+    rec = r.get_order(perm_id=9001)
+    assert rec.perm_id == 9001 and rec.status == "Submitted"
+    assert r.get_order(order_id=42) is rec
+
     r.on_order_status(make_trade(status="Cancelled", filled=0, remaining=10,
                                  perm_id=9001, order_id=42))
+    assert r.live_orders() == []
+
+
+def test_fill_after_merge_attaches_to_order():
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_order_status(make_trade(status="PendingSubmit", filled=0, remaining=10,
+                                 perm_id=0, order_id=42))
+    r.on_order_status(make_trade(status="Submitted", filled=0, remaining=10,
+                                 perm_id=9001, order_id=42))
+    r.on_exec_details(None, make_fill("0001.abc", perm_id=9001, order_id=42))
+    assert r.get_order(perm_id=9001).exec_ids == {"0001.abc"}
+
+
+def test_same_order_id_from_other_client_not_merged():
+    """orderId is unique only within one API client."""
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_order_status(make_trade(status="PendingSubmit", filled=0, remaining=10,
+                                 perm_id=0, order_id=42, client_id=7))
+    r.on_order_status(make_trade(status="Submitted", filled=0, remaining=5,
+                                 perm_id=8001, order_id=42, client_id=99,
+                                 symbol="NVDA"))
+    assert r.stats()["orders"] == 2
+    assert r.get_order(perm_id=8001).client_id == 99
+
+
+def test_stale_copy_dropped_when_perm_id_record_exists():
+    """Events out of order: permId record first, then a late permId-less one."""
+    r = ExecutionRegistry(own_client_id=7)
+    r.on_order_status(make_trade(status="Submitted", filled=0, remaining=10,
+                                 perm_id=9001, order_id=42))
+    r.on_order_status(make_trade(status="PendingSubmit", filled=0, remaining=10,
+                                 perm_id=0, order_id=42))
+    r.on_order_status(make_trade(status="Filled", perm_id=9001, order_id=42))
+    assert r.stats()["orders"] == 1
     assert r.live_orders() == []

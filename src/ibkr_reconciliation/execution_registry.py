@@ -173,12 +173,32 @@ class ExecutionRegistry:
             perm_id = getattr(order, "permId", None) or getattr(status_obj, "permId", None)
             order_id = getattr(order, "orderId", None)
 
+            client_id = getattr(order, "clientId", None)
+
             with self._lock:
                 key = perm_id if perm_id else order_id
                 if key is None:
                     return
 
                 rec = self._orders.get(key)
+
+                # The first status of a new order (PendingSubmit) can arrive
+                # before IBKR has assigned a permId. That record was keyed by
+                # orderId; now that the permId is known, move it under the
+                # permId instead of leaving a stale copy that looks live.
+                # orderId is unique only within one client, so merge only a
+                # record from the same client.
+                if perm_id and order_id is not None:
+                    early = self._orders.get(order_id)
+                    if (early is not None and early is not rec
+                            and not early.perm_id
+                            and early.client_id == client_id):
+                        del self._orders[order_id]
+                        if rec is None:
+                            early.perm_id = perm_id
+                            rec = early
+                            self._orders[perm_id] = rec
+
                 if rec is None:
                     rec = OrderRecord(
                         perm_id=perm_id,
@@ -186,7 +206,7 @@ class ExecutionRegistry:
                         symbol=getattr(contract, "symbol", "") if contract else "",
                         action=getattr(order, "action", ""),
                         total_qty=float(getattr(order, "totalQuantity", 0) or 0),
-                        client_id=getattr(order, "clientId", None),
+                        client_id=client_id,
                     )
                     self._orders[key] = rec
 

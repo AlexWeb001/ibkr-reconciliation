@@ -79,6 +79,7 @@ reg.live_orders()
 
 - Deduplicates on `execId`.
 - Orders are keyed by `permId`, so manual TWS orders and other clients are visible.
+- The first status of a new order can arrive before IBKR assigns a `permId` (`PendingSubmit` with `permId = 0`). That early record is moved under the real `permId` when it appears, instead of being left behind as a second order that looks live. Only records from the same API client are merged, because `orderId` is unique per client.
 - Commission reports, which arrive separately, are attached to their fill. NaN `realizedPNL` is ignored.
 - A malformed event is logged and dropped; it never takes the event loop down.
 
@@ -108,7 +109,6 @@ Never places or cancels orders. Symbols the bot does not trade are ignored, so m
 
 ## Known limitations
 
-- **Order status before `permId`.** If the first `orderStatus` for an order arrives with `permId = 0` (it can, in `PendingSubmit`), the registry keys that record by `orderId`. Later events with the real `permId` create a second record, and the first one can stay "live". Covered by an `xfail` test; to be fixed by merging on `orderId`.
 - `reconciliation` compares whole positions per symbol. Two strategies trading the same symbol on one account need their own attribution layer.
 - Quantities in `reconciliation` are integers (stocks, futures). Fractional shares are not handled.
 
