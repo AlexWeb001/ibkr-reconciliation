@@ -119,7 +119,7 @@ python -m pip install pytest
 python -m pytest -q
 ```
 
-Python 3.9+, no runtime dependencies.
+Python 3.10+, no runtime dependencies.
 
 ## Context
 
